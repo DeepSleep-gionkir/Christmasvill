@@ -8,7 +8,7 @@
         body {
             margin: 0;
             overflow: hidden;
-            background-color: #050510; /* 배경을 아주 어두운 남색으로 */
+            background-color: #050510;
             font-family: 'Noto Sans KR', sans-serif;
         }
         #canvas-container {
@@ -43,7 +43,7 @@
 </head>
 <body>
 
-<div id="loading">🌕 하늘에 달을 띄우고 섬을 만드는 중... 🎄</div>
+<div id="loading">🌕 하늘에 달을 띄우고 울퉁불퉁한 섬을 만드는 중... 🎄</div>
 <div id="canvas-container"></div>
 <div class="controls-info">화면을 드래그하여 떠있는 겨울 섬을 감상하세요</div>
 
@@ -68,7 +68,7 @@
         villagerCount: 12,
         sceneColor: 0x050510,
         fogColor: 0x050510,   
-        islandRadius: 130,     // [변경] 섬의 반지름 (이 범위 안에만 오브젝트 배치)
+        islandRadius: 130,
         skySize: 4000
     };
 
@@ -78,12 +78,11 @@
     // 씬 생성
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(CONFIG.sceneColor);
-    // 안개를 줄여서 밤하늘과 달이 선명하게 보이도록 함
     scene.fog = new THREE.FogExp2(0x101025, 0.0015);
 
     // 카메라 설정
     const aspect = container.clientWidth / container.clientHeight;
-    const d = 80; // 줌 아웃을 조금 더 해서 섬 전체가 보이게
+    const d = 100;
     const camera = new THREE.OrthographicCamera(-d * aspect, d * aspect, d, -d, 1, 10000);
     camera.position.set(100, 80, 100); 
     camera.lookAt(scene.position);
@@ -101,13 +100,13 @@
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
-    controls.maxPolarAngle = Math.PI - 0.5; // [변경] 섬 아래쪽도 살짝 볼 수 있게 제한 해제
+    // [수정] 섬의 바닥을 볼 수 없도록 각도 제한 (PI/2는 수평, 조금 더 아래까지 허용)
+    controls.maxPolarAngle = Math.PI / 1.8; 
     controls.minZoom = 0.4;
     controls.maxZoom = 2.5;
 
     // --- 조명 ---
     function setupLighting() {
-        // 달빛 느낌의 푸르스름한 환경광
         const ambientLight = new THREE.HemisphereLight(0xeef0ff, 0x050510, 0.4);
         scene.add(ambientLight);
 
@@ -121,7 +120,6 @@
         dirLight.shadow.camera.bottom = -150;
         scene.add(dirLight);
 
-        // 마을 중심을 밝히는 따뜻한 빛
         const centerLight = new THREE.PointLight(0xffaa00, 2.0, 80);
         centerLight.position.set(0, 20, 0);
         scene.add(centerLight);
@@ -131,7 +129,7 @@
     // --- 재질 ---
     const materials = {
         snow: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 }),
-        ice: new THREE.MeshStandardMaterial({ color: 0xcfefff, roughness: 0.2, metalness: 0.1 }), // 섬 옆면용
+        ice: new THREE.MeshStandardMaterial({ color: 0xcfefff, roughness: 0.4, metalness: 0.1, flatShading: true }), // 섬 옆면용
         wood: new THREE.MeshStandardMaterial({ color: 0x8d6e63, roughness: 1.0 }),
         darkWood: new THREE.MeshStandardMaterial({ color: 0x4e342e, roughness: 1.0 }),
         leaf: new THREE.MeshStandardMaterial({ color: 0x1b5e20, roughness: 0.8, flatShading: true }),
@@ -143,146 +141,115 @@
         silver: new THREE.MeshStandardMaterial({ color: 0xe0e0e0, metalness: 0.9, roughness: 0.1 }),
         blue: new THREE.MeshStandardMaterial({ color: 0x1976d2, roughness: 0.3, metalness: 0.1 }),
         lampPost: new THREE.MeshStandardMaterial({ color: 0x212121, metalness: 0.5, roughness: 0.5 }),
-        moon: new THREE.MeshBasicMaterial({ color: 0xffffdd })
+        moon: new THREE.MeshBasicMaterial({ color: 0xffffdd, fog: false }),
+        star: new THREE.PointsMaterial({ color: 0xffffff, size: 1, sizeAttenuation: false, fog: false })
     };
 
-    // --- [변경] 떠 있는 섬 (Floating Island) ---
+    // --- [수정] 불규칙한 테두리의 떠 있는 섬 ---
     function createFloatingIsland() {
-        // 위쪽 눈 덮인 평지
-        const topGeo = new THREE.CylinderGeometry(CONFIG.islandRadius, CONFIG.islandRadius, 4, 64);
-        const topMesh = new THREE.Mesh(topGeo, materials.snow);
-        topMesh.position.y = -2;
-        topMesh.receiveShadow = true;
-        scene.add(topMesh);
+        const islandGroup = new THREE.Group();
+        
+        // 중심부 큰 덩어리 (눈 덮인 상단)
+        const mainGeo = new THREE.CylinderGeometry(CONFIG.islandRadius * 0.8, CONFIG.islandRadius * 0.9, 5, 16);
+        const mainMesh = new THREE.Mesh(mainGeo, materials.snow);
+        mainMesh.position.y = -2.5;
+        mainMesh.receiveShadow = true;
+        islandGroup.add(mainMesh);
 
-        // 아래쪽 흙/얼음 덩어리 (불규칙한 느낌을 위해 콘 모양 활용)
-        const bottomGeo = new THREE.ConeGeometry(CONFIG.islandRadius * 0.9, 40, 64);
-        const bottomMesh = new THREE.Mesh(bottomGeo, materials.ice);
-        bottomMesh.position.y = -24;
-        bottomMesh.rotation.x = Math.PI; // 뒤집음
-        scene.add(bottomMesh);
+        // 불규칙한 테두리 및 하단부 (얼음/바위 덩어리 조합)
+        for (let i = 0; i < 40; i++) {
+            const angle = (i / 40) * Math.PI * 2;
+            const radius = CONFIG.islandRadius * (0.8 + Math.random() * 0.3);
+            const x = Math.cos(angle) * radius;
+            const z = Math.sin(angle) * radius;
+            const y = -5 - Math.random() * 15;
+            const scale = 10 + Math.random() * 20;
+
+            const geo = new THREE.DodecahedronGeometry(scale, 0);
+            const mesh = new THREE.Mesh(geo, materials.ice);
+            mesh.position.set(x, y, z);
+            mesh.rotation.set(Math.random(), Math.random(), Math.random());
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            islandGroup.add(mesh);
+
+            // 테두리 부분 상단에 눈 조금 덮기
+            if (y > -10) {
+                const snowGeo = new THREE.DodecahedronGeometry(scale * 0.9, 0);
+                const snowMesh = new THREE.Mesh(snowGeo, materials.snow);
+                snowMesh.position.set(x, y + scale * 0.5, z);
+                snowMesh.rotation.copy(mesh.rotation);
+                islandGroup.add(snowMesh);
+            }
+        }
+        scene.add(islandGroup);
     }
     createFloatingIsland();
 
-    // --- [변경] 예쁜 밤하늘 (달 + 그라데이션 + 별) ---
-    let stars;
+    // --- [수정] 밤하늘 (달과 별이 보이도록 수정) ---
     function createNightSky() {
-        // 1. 그라데이션 하늘 (Sphere 전체)
+        // 1. 그라데이션 하늘
         const skyGeo = new THREE.SphereGeometry(CONFIG.skySize, 64, 64);
         const count = skyGeo.attributes.position.count;
         const colors = [];
-        
-        // 색상 팔레트
-        const colorTop = new THREE.Color(0x020205);      // 천정: 심연의 검정
-        const colorMid = new THREE.Color(0x1a1a40);      // 중간: 깊은 보라/남색
-        const colorBot = new THREE.Color(0x050510);      // 바닥: 어두운 공허
+        const colorTop = new THREE.Color(0x020205);
+        const colorMid = new THREE.Color(0x1a1a40);
+        const colorBot = new THREE.Color(0x050510);
 
         for(let i = 0; i < count; i++) {
             const y = skyGeo.attributes.position.getY(i);
             const r = CONFIG.skySize;
-            
-            // y값(-r ~ r)을 0~1로 정규화
             const t = (y / r + 1) / 2; 
-
-            // 그라데이션 로직
             let c = new THREE.Color();
             if(t > 0.5) {
-                // 상단부 (Horizon -> Zenith)
-                const upperT = (t - 0.5) * 2;
-                c.copy(colorMid).lerp(colorTop, Math.pow(upperT, 0.5));
+                c.copy(colorMid).lerp(colorTop, Math.pow((t - 0.5) * 2, 0.5));
             } else {
-                // 하단부 (Void -> Horizon)
-                const lowerT = t * 2;
-                c.copy(colorBot).lerp(colorMid, lowerT);
+                c.copy(colorBot).lerp(colorMid, t * 2);
             }
             colors.push(c.r, c.g, c.b);
         }
-
         skyGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-        const skyMat = new THREE.MeshBasicMaterial({ 
-            vertexColors: true, 
-            side: THREE.BackSide,
-            fog: false 
-        });
+        const skyMat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false });
         const skyDome = new THREE.Mesh(skyGeo, skyMat);
         scene.add(skyDome);
 
-        // 2. 달 (Moon) 추가
+        // 2. [수정] 달 (Moon) 추가 - 더 잘 보이게 위치 및 크기 조정
         const moonGroup = new THREE.Group();
-        // 달 본체
-        const moonMesh = new THREE.Mesh(new THREE.SphereGeometry(25, 32, 32), materials.moon);
-        // 달무리 (Glow)
-        const glowGeo = new THREE.CircleGeometry(40, 32);
-        const glowMat = new THREE.MeshBasicMaterial({ 
-            color: 0xffffaa, 
-            transparent: true, 
-            opacity: 0.15, 
-            side: THREE.DoubleSide,
-            fog: false
-        });
+        const moonMesh = new THREE.Mesh(new THREE.SphereGeometry(40, 32, 32), materials.moon);
+        const glowGeo = new THREE.CircleGeometry(60, 32);
+        const glowMat = new THREE.MeshBasicMaterial({ color: 0xffffaa, transparent: true, opacity: 0.2, side: THREE.DoubleSide, fog: false });
         const glowMesh = new THREE.Mesh(glowGeo, glowMat);
-        glowMesh.lookAt(camera.position); // 항상 카메라를 보게
-
+        glowMesh.lookAt(camera.position); 
         moonGroup.add(moonMesh);
         moonGroup.add(glowMesh);
-        
-        // 달 위치 배치 (카메라 뒤쪽 말고 씬 뒤쪽에)
-        moonGroup.position.set(200, 300, -400);
+        moonGroup.position.set(500, 800, -1000); // 위치 조정
         scene.add(moonGroup);
 
-        // 3. 반짝이는 별
+        // 3. [수정] 별 (Stars) - PointsMaterial로 확실하게 보이게 변경
         const starGeo = new THREE.BufferGeometry();
         const starPos = [];
-        const starInitialOpacities = [];
-        
-        for(let i=0; i<2000; i++) {
-            const r = CONFIG.skySize * 0.95;
+        for(let i=0; i<3000; i++) {
+            const r = CONFIG.skySize * 0.9;
             const theta = Math.random() * Math.PI * 2;
             const phi = Math.acos((Math.random() * 2) - 1);
-            
             starPos.push(
                 r * Math.sin(phi) * Math.cos(theta),
                 r * Math.cos(phi),
                 r * Math.sin(phi) * Math.sin(theta)
             );
-            starInitialOpacities.push(Math.random()); 
         }
         starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPos, 3));
-        starGeo.setAttribute('alpha', new THREE.Float32BufferAttribute(starInitialOpacities, 1));
-
-        const starMat = new THREE.ShaderMaterial({
-            uniforms: { time: { value: 0.0 } },
-            vertexShader: `
-                attribute float alpha;
-                varying float vAlpha;
-                void main() {
-                    vAlpha = alpha;
-                    gl_PointSize = 6.0 * alpha; // 밝을수록 더 크게
-                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-                }
-            `,
-            fragmentShader: `
-                uniform float time;
-                varying float vAlpha;
-                void main() {
-                    float twinkle = 0.5 + 0.5 * sin(time * 1.5 + vAlpha * 20.0);
-                    gl_FragColor = vec4(1.0, 1.0, 1.0, vAlpha * twinkle);
-                }
-            `,
-            transparent: true,
-            fog: false
-        });
-        stars = new THREE.Points(starGeo, starMat);
+        const stars = new THREE.Points(starGeo, materials.star);
         scene.add(stars);
     }
 
-    // --- 눈송이 (섬 아래로 떨어지게 수정) ---
+    // --- 눈송이 ---
     let snowSystem;
     function createSnow() {
         const geo = new THREE.BufferGeometry();
         const positions = [];
         const velocities = [];
-        const range = CONFIG.islandRadius * 2.2; // 섬보다 조금 넓게
+        const range = CONFIG.islandRadius * 2.5;
 
         for (let i = 0; i < CONFIG.snowCount; i++) {
             positions.push(
@@ -319,8 +286,7 @@
         scene.add(snowSystem);
     }
 
-    // --- (이하 오브젝트 생성 함수들은 기존 로직 유지, 배치 범위만 섬 크기에 맞춤) ---
-    
+    // --- (이하 오브젝트 생성 함수들은 기존 유지) ---
     // 소나무
     function createPineTree(x, z, scale = 1) {
         const group = new THREE.Group();
@@ -328,7 +294,6 @@
         trunk.position.y = 1.5 * scale;
         trunk.castShadow = true;
         group.add(trunk);
-
         for(let i=0; i<3; i++) {
             const size = (2.5 - i * 0.5) * scale;
             const y = (3 + i * 2) * scale;
@@ -547,7 +512,7 @@
             head.position.y = 1.6;
             group.add(body, head);
             const angle = Math.random() * Math.PI * 2;
-            const dist = 10 + Math.random() * (CONFIG.islandRadius * 0.4); // 섬 안쪽에 배치
+            const dist = 10 + Math.random() * (CONFIG.islandRadius * 0.4);
             group.position.set(Math.cos(angle)*dist, 0, Math.sin(angle)*dist);
             scene.add(group);
             villagers.push({ mesh: group, angle: angle, dist: dist, speed: 0.003 + Math.random() * 0.004, hopOffset: Math.random() * Math.PI });
@@ -561,21 +526,23 @@
         createSleigh();
         createVillagers();
 
-        const islandLimit = CONFIG.islandRadius - 10; // 섬 가장자리는 피해서
+        const islandLimit = CONFIG.islandRadius * 0.8;
 
         // 1. 집 배치
         for(let i=0; i<CONFIG.houseCount; i++) {
             const angle = (i / CONFIG.houseCount) * Math.PI * 2 + (Math.random()*0.2);
             const dist = 35 + Math.random() * 10;
-            createHouse(Math.cos(angle)*dist, Math.sin(angle)*dist, -angle + Math.PI/2);
-            if(Math.random() > 0.3) createLamp(Math.cos(angle)*(dist+6), Math.sin(angle)*(dist+6));
-            if(Math.random() > 0.5) createGift(Math.cos(angle)*(dist-4), Math.sin(angle)*(dist-4));
+            if (dist < islandLimit) {
+                createHouse(Math.cos(angle)*dist, Math.sin(angle)*dist, -angle + Math.PI/2);
+                if(Math.random() > 0.3) createLamp(Math.cos(angle)*(dist+6), Math.sin(angle)*(dist+6));
+                if(Math.random() > 0.5) createGift(Math.cos(angle)*(dist-4), Math.sin(angle)*(dist-4));
+            }
         }
 
-        // 2. 숲 배치 (섬 크기 고려)
+        // 2. 숲 배치
         for(let i=0; i<CONFIG.treeCount; i++) {
             const angle = Math.random() * Math.PI * 2;
-            const dist = 50 + Math.random() * (islandLimit - 50); 
+            const dist = 50 + Math.random() * 60; 
             if (dist < islandLimit) {
                 createPineTree(Math.cos(angle)*dist, Math.sin(angle)*dist, 1 + Math.random()*0.5);
             }
@@ -585,7 +552,9 @@
         for(let i=0; i<5; i++) {
             const angle = Math.random() * Math.PI * 2;
             const dist = 20 + Math.random() * 20;
-            createSnowman(Math.cos(angle)*dist, Math.sin(angle)*dist);
+            if (dist < islandLimit) {
+                createSnowman(Math.cos(angle)*dist, Math.sin(angle)*dist);
+            }
         }
 
         loading.style.opacity = 0;
@@ -603,21 +572,16 @@
 
         controls.update();
 
-        if (stars && stars.material.uniforms) {
-            stars.material.uniforms.time.value = time;
-        }
-
-        // 눈 (섬 아래로 떨어지게 수정)
+        // 눈
         if(snowSystem) {
             const pos = snowSystem.geometry.attributes.position.array;
             const vel = snowSystem.userData.velocities;
             for(let i=0; i<CONFIG.snowCount; i++) {
                 pos[i*3 + 1] -= vel[i];
-                // 섬 아래(-50)로 떨어지면 다시 위로
                 if(pos[i*3+1] < -50) { 
                     pos[i*3+1] = 150;
-                    pos[i*3] = (Math.random()-0.5) * CONFIG.islandRadius * 2.2;
-                    pos[i*3+2] = (Math.random()-0.5) * CONFIG.islandRadius * 2.2;
+                    pos[i*3] = (Math.random()-0.5) * CONFIG.islandRadius * 2.5;
+                    pos[i*3+2] = (Math.random()-0.5) * CONFIG.islandRadius * 2.5;
                 }
             }
             snowSystem.geometry.attributes.position.needsUpdate = true;
