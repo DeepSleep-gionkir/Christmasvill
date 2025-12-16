@@ -3,13 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Ultimate Christmas Tree Village - Whiteout Edition</title>
+    <title>Ultimate Christmas Tree Village</title>
     <style>
         body {
             margin: 0;
             overflow: hidden;
-            /* [수정] 배경을 흰색으로 변경 */
-            background-color: #ffffff;
+            background-color: #0b1026; /* 기본 배경색을 더 깊은 밤색으로 변경 */
             font-family: 'Noto Sans KR', sans-serif;
         }
         #canvas-container {
@@ -22,12 +21,11 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            /* [수정] 흰 배경에서 잘 보이도록 글씨 색상 변경 (금색 계열) */
-            color: #d4af37;
+            color: #ffd700;
             font-size: 1.2rem;
             pointer-events: none;
             transition: opacity 0.5s;
-            font-weight: bold;
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
             text-align: center;
         }
         .controls-info {
@@ -35,18 +33,17 @@
             bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
-            /* [수정] 안내 문구 색상 변경 */
-            color: rgba(50, 50, 50, 0.8);
+            color: rgba(255, 255, 255, 0.9);
             font-size: 0.9rem;
             pointer-events: none;
+            text-shadow: 0 1px 5px rgba(0,0,0,0.8);
             text-align: center;
-            font-weight: 500;
         }
     </style>
 </head>
 <body>
 
-<div id="loading">🎄 온 세상이 하얗게 물드는 중... 🎄</div>
+<div id="loading">🎄 트리에 요정 조명을 감는 중... 🎄</div>
 <div id="canvas-container"></div>
 <div class="controls-info">화면을 드래그하여 마을 둘러보기</div>
 
@@ -69,11 +66,11 @@
         houseCount: 12,
         treeCount: 60,
         villagerCount: 15,
-        // [수정] 배경과 안개를 완전한 흰색으로 설정
-        sceneColor: 0xffffff, 
-        fogColor: 0xffffff,   
+        sceneColor: 0x0b1026, // 아주 어두운 밤하늘색
+        fogColor: 0x151525,   
         shadowMapSize: 2048,
-        groundSize: 5000
+        groundSize: 5000,     // [수정] 바닥 크기를 대폭 늘려 검은 공간 제거
+        skySize: 4000         // [추가] 하늘 돔 크기
     };
 
     const container = document.getElementById('canvas-container');
@@ -82,12 +79,13 @@
     // 씬 생성
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(CONFIG.sceneColor);
-    // 안개를 흰색으로 설정하여 멀리 있는 땅이 배경과 자연스럽게 섞이도록 함
-    scene.fog = new THREE.FogExp2(CONFIG.fogColor, 0.0015); 
+    // 안개 거리를 늘려서 하늘 그라데이션이 보이도록 조정
+    scene.fog = new THREE.FogExp2(CONFIG.fogColor, 0.001); 
 
     // 카메라 설정 (Orthographic)
     const aspect = container.clientWidth / container.clientHeight;
     const d = 65;
+    // [수정] far 값을 10000으로 늘려 거대한 바닥과 하늘이 잘리지 않게 함
     const camera = new THREE.OrthographicCamera(-d * aspect, d * aspect, d, -d, 1, 10000);
     camera.position.set(100, 80, 100); 
     camera.lookAt(scene.position);
@@ -99,41 +97,37 @@
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    // [수정] 전체적으로 너무 밝아지지 않도록 노출값 약간 조정
-    renderer.toneMappingExposure = 1.1;
+    renderer.toneMappingExposure = 1.3;
     container.appendChild(renderer.domElement);
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
-    controls.maxPolarAngle = Math.PI / 2 - 0.02; 
+    controls.maxPolarAngle = Math.PI / 2 - 0.05; // 땅 밑으로 내려가지 않도록 제한
     controls.minZoom = 0.4;
     controls.maxZoom = 2.5;
 
     // --- 조명 ---
     function setupLighting() {
-        // [수정] 환경광을 매우 밝게 설정 (하늘도 흰색, 땅 반사광도 흰색)
-        const ambientLight = new THREE.HemisphereLight(0xffffff, 0xffffff, 1.0);
+        const ambientLight = new THREE.HemisphereLight(0xffffff, 0x2a2a35, 0.6); // 하단 색상을 어둡게 조정
         scene.add(ambientLight);
 
         const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
         dirLight.position.set(-80, 120, -60);
         dirLight.castShadow = true;
+        // 그림자 범위도 넉넉하게
         dirLight.shadow.mapSize.set(2048, 2048);
         dirLight.shadow.camera.left = -200;
         dirLight.shadow.camera.right = 200;
         dirLight.shadow.camera.top = 200;
         dirLight.shadow.camera.bottom = -200;
-        // 그림자가 너무 진하지 않게 조정
-        dirLight.shadow.bias = -0.0005;
         scene.add(dirLight);
 
-        // 포인트 라이트들의 강도를 밝은 배경에 맞춰 약간 조정
-        const centerLight = new THREE.PointLight(0xffaa00, 2.0, 60);
+        const centerLight = new THREE.PointLight(0xffaa00, 2.5, 60);
         centerLight.position.set(0, 15, 0);
         scene.add(centerLight);
         
-        const topLight = new THREE.PointLight(0x88ccff, 0.8, 40);
+        const topLight = new THREE.PointLight(0x88ccff, 1.0, 40);
         topLight.position.set(0, 30, 0);
         scene.add(topLight);
     }
@@ -141,31 +135,95 @@
 
     // --- 재질 ---
     const materials = {
-        // [수정] 눈 재질이 밝은 빛에서 너무 타지 않도록 거칠기 조정
-        snow: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1.0 }),
+        snow: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 }),
         wood: new THREE.MeshStandardMaterial({ color: 0x8d6e63, roughness: 1.0 }),
         darkWood: new THREE.MeshStandardMaterial({ color: 0x4e342e, roughness: 1.0 }),
         leaf: new THREE.MeshStandardMaterial({ color: 0x1b5e20, roughness: 0.8, flatShading: true }),
         glowYellow: new THREE.MeshStandardMaterial({ 
-            color: 0xffd54f, emissive: 0xffa000, emissiveIntensity: 3 
+            color: 0xffd54f, emissive: 0xffa000, emissiveIntensity: 4 
         }),
-        gold: new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.7, roughness: 0.3 }),
-        red: new THREE.MeshStandardMaterial({ color: 0xd32f2f, roughness: 0.4, metalness: 0.1 }),
-        silver: new THREE.MeshStandardMaterial({ color: 0xe0e0e0, metalness: 0.8, roughness: 0.2 }),
-        blue: new THREE.MeshStandardMaterial({ color: 0x1976d2, roughness: 0.4, metalness: 0.1 }),
+        gold: new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.8, roughness: 0.2 }),
+        red: new THREE.MeshStandardMaterial({ color: 0xd32f2f, roughness: 0.3, metalness: 0.1 }),
+        silver: new THREE.MeshStandardMaterial({ color: 0xe0e0e0, metalness: 0.9, roughness: 0.1 }),
+        blue: new THREE.MeshStandardMaterial({ color: 0x1976d2, roughness: 0.3, metalness: 0.1 }),
         lampPost: new THREE.MeshStandardMaterial({ color: 0x212121, metalness: 0.5, roughness: 0.5 })
     };
 
-    // --- 무한히 넓은 바닥 ---
+    // --- [수정] 무한히 넓은 바닥 ---
     const ground = new THREE.Mesh(
         new THREE.CylinderGeometry(CONFIG.groundSize, CONFIG.groundSize, 10, 64),
         materials.snow
     );
-    ground.position.y = -5;
+    ground.position.y = -5; // 살짝 내려서 배치
     ground.receiveShadow = true;
     scene.add(ground);
 
-    // [삭제] createGradientSky 함수 제거됨 (하늘 돔 및 별 삭제)
+    // --- [추가] 예쁜 밤하늘 (그라데이션 + 별) ---
+    function createGradientSky() {
+        // 1. 그라데이션 하늘 (Vertex Colors 활용)
+        const skyGeo = new THREE.SphereGeometry(CONFIG.skySize, 32, 32);
+        const count = skyGeo.attributes.position.count;
+        const colors = [];
+        const colorTop = new THREE.Color(0x050814); // 천정: 깊은 검푸른색
+        const colorBot = new THREE.Color(0x2d3663); // 지평선: 은은한 남보라빛
+        const colorWhite = new THREE.Color(0xffffff); // [추가] 하얀색
+
+        for(let i = 0; i < count; i++) {
+            const y = skyGeo.attributes.position.getY(i);
+            
+            // [수정] 지평선(y=0) 아래는 하얀색으로 채움
+            if (y < 0) {
+                colors.push(colorWhite.r, colorWhite.g, colorWhite.b);
+            } else {
+                // 지평선 위는 기존 그라데이션 적용
+                // y는 0 ~ CONFIG.skySize 범위. t를 0 ~ 1로 매핑
+                let t = y / CONFIG.skySize; 
+                t = Math.pow(t, 0.8); // 그라데이션 분포 조절
+                
+                const c = colorBot.clone().lerp(colorTop, t);
+                colors.push(c.r, c.g, c.b);
+            }
+        }
+
+        skyGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+        
+        const skyMat = new THREE.MeshBasicMaterial({ 
+            vertexColors: true, 
+            side: THREE.BackSide, // 안쪽 면을 렌더링
+            fog: false // 안개 영향을 받지 않도록 (선명한 하늘)
+        });
+        
+        const skyDome = new THREE.Mesh(skyGeo, skyMat);
+        scene.add(skyDome);
+
+        // 2. 배경 별 (멀리서 반짝이는 별들)
+        const starGeo = new THREE.BufferGeometry();
+        const starPos = [];
+        for(let i=0; i<1500; i++) {
+            const r = CONFIG.skySize * 0.9; // 하늘 돔보다 약간 안쪽
+            const theta = Math.random() * Math.PI * 2;
+            const phi = Math.acos((Math.random() * 2) - 1);
+            
+            // 위쪽 반구에만 별 배치 (지평선 아래는 바닥이므로 제외해도 됨)
+            if (phi > Math.PI / 1.8) continue; 
+
+            starPos.push(
+                r * Math.sin(phi) * Math.cos(theta),
+                r * Math.cos(phi), // Y축이 위
+                r * Math.sin(phi) * Math.sin(theta)
+            );
+        }
+        starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPos, 3));
+        const starMat = new THREE.PointsMaterial({
+            color: 0xffffff,
+            size: 8,
+            transparent: true,
+            opacity: 0.8,
+            fog: false
+        });
+        const stars = new THREE.Points(starGeo, starMat);
+        scene.add(stars);
+    }
 
     // --- 눈송이 (떨어지는 눈) ---
     let snowSystem;
@@ -173,7 +231,7 @@
         const geo = new THREE.BufferGeometry();
         const positions = [];
         const velocities = [];
-        const range = 400;
+        const range = 400; // 눈 내리는 범위는 마을 근처로 유지
 
         for (let i = 0; i < CONFIG.snowCount; i++) {
             positions.push(
@@ -186,6 +244,7 @@
 
         geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
         
+        // 간단한 원형 텍스처 생성
         const canvas = document.createElement('canvas');
         canvas.width = 32; canvas.height = 32;
         const ctx = canvas.getContext('2d');
@@ -200,8 +259,7 @@
             size: 1.2,
             map: new THREE.CanvasTexture(canvas),
             transparent: true,
-            // [수정] 밝은 배경에서 눈이 잘 보이도록 투명도 약간 조정
-            opacity: 0.8, 
+            opacity: 0.9,
             depthWrite: false,
             blending: THREE.AdditiveBlending
         });
@@ -534,7 +592,7 @@
 
     // --- 초기화 ---
     function initWorld() {
-        // [수정] createGradientSky() 호출 제거
+        createGradientSky(); // 하늘 추가
         createSnow();
         createMainTree();
         createSleigh();
