@@ -43,7 +43,7 @@
 </head>
 <body>
 
-<div id="loading">🌕 하늘에 달을 띄우고 울퉁불퉁한 섬을 만드는 중... 🎄</div>
+<div id="loading">🌕 하늘에 달을 띄우고 섬 바닥을 두껍게 쌓는 중... 🎄</div>
 <div id="canvas-container"></div>
 <div class="controls-info">화면을 드래그하여 떠있는 겨울 섬을 감상하세요</div>
 
@@ -100,7 +100,7 @@
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
-    // [수정] 섬의 바닥을 볼 수 없도록 각도 제한 (PI/2는 수평, 조금 더 아래까지 허용)
+    // 각도 제한 유지 (요청하신 대로 수정하지 않음)
     controls.maxPolarAngle = Math.PI / 1.8; 
     controls.minZoom = 0.4;
     controls.maxZoom = 2.5;
@@ -129,7 +129,7 @@
     // --- 재질 ---
     const materials = {
         snow: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 }),
-        ice: new THREE.MeshStandardMaterial({ color: 0xcfefff, roughness: 0.4, metalness: 0.1, flatShading: true }), // 섬 옆면용
+        ice: new THREE.MeshStandardMaterial({ color: 0xcfefff, roughness: 0.5, metalness: 0.1, flatShading: true }), // 바위 질감 조정
         wood: new THREE.MeshStandardMaterial({ color: 0x8d6e63, roughness: 1.0 }),
         darkWood: new THREE.MeshStandardMaterial({ color: 0x4e342e, roughness: 1.0 }),
         leaf: new THREE.MeshStandardMaterial({ color: 0x1b5e20, roughness: 0.8, flatShading: true }),
@@ -145,40 +145,67 @@
         star: new THREE.PointsMaterial({ color: 0xffffff, size: 1, sizeAttenuation: false, fog: false })
     };
 
-    // --- [수정] 불규칙한 테두리의 떠 있는 섬 ---
+    // --- [수정] 두툼하고 불규칙한 떠 있는 섬 ---
     function createFloatingIsland() {
         const islandGroup = new THREE.Group();
         
-        // 중심부 큰 덩어리 (눈 덮인 상단)
-        const mainGeo = new THREE.CylinderGeometry(CONFIG.islandRadius * 0.8, CONFIG.islandRadius * 0.9, 5, 16);
+        // 1. 중심부 상단 (눈 덮인 평평한 부분)
+        const mainGeo = new THREE.CylinderGeometry(CONFIG.islandRadius * 0.8, CONFIG.islandRadius * 0.85, 5, 32);
         const mainMesh = new THREE.Mesh(mainGeo, materials.snow);
         mainMesh.position.y = -2.5;
         mainMesh.receiveShadow = true;
         islandGroup.add(mainMesh);
 
-        // 불규칙한 테두리 및 하단부 (얼음/바위 덩어리 조합)
-        for (let i = 0; i < 40; i++) {
-            const angle = (i / 40) * Math.PI * 2;
-            const radius = CONFIG.islandRadius * (0.8 + Math.random() * 0.3);
-            const x = Math.cos(angle) * radius;
-            const z = Math.sin(angle) * radius;
-            const y = -5 - Math.random() * 15;
-            const scale = 10 + Math.random() * 20;
-
+        // 2. [신규] 중심부 하단을 채워주는 거대한 바위 덩어리들 (기반 공사)
+        for(let i=0; i<6; i++) {
+            // 섬 반지름의 30%~50% 크기의 거대한 덩어리
+            const scale = CONFIG.islandRadius * (0.3 + Math.random() * 0.2);
             const geo = new THREE.DodecahedronGeometry(scale, 0);
             const mesh = new THREE.Mesh(geo, materials.ice);
-            mesh.position.set(x, y, z);
+            
+            // 중심부 근처 깊은 곳에 배치하여 부피감 형성
+            mesh.position.set(
+                (Math.random() - 0.5) * 40, // 중심에서 약간 벗어난 위치
+                -scale * 0.8 - Math.random() * 20, // 깊이 설정 (상단 바로 아래부터 깊게)
+                (Math.random() - 0.5) * 40
+            );
             mesh.rotation.set(Math.random(), Math.random(), Math.random());
             mesh.castShadow = true;
             mesh.receiveShadow = true;
             islandGroup.add(mesh);
+        }
 
-            // 테두리 부분 상단에 눈 조금 덮기
-            if (y > -10) {
-                const snowGeo = new THREE.DodecahedronGeometry(scale * 0.9, 0);
+        // 3. [수정] 불규칙한 테두리 및 하단부 채움 (개수 늘리고 깊이 확장)
+        const numRocks = 80; // 바위 개수 증가 (40 -> 80)
+        for (let i = 0; i < numRocks; i++) {
+            const angle = (i / numRocks) * Math.PI * 2;
+            // 반지름 다양성 증가
+            const radius = CONFIG.islandRadius * (0.7 + Math.random() * 0.4);
+            const x = Math.cos(angle) * radius;
+            const z = Math.sin(angle) * radius;
+            
+            // [핵심 수정] 깊이 범위를 훨씬 깊게 확장 (-5 ~ -85)
+            const y = -5 - Math.random() * 80;
+            // 스케일도 더 다양하게
+            const scale = 15 + Math.random() * 35;
+
+            const geo = new THREE.DodecahedronGeometry(scale, 0);
+            const mesh = new THREE.Mesh(geo, materials.ice);
+            mesh.position.set(x, y, z);
+            // 랜덤 회전으로 불규칙함 강조
+            mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            islandGroup.add(mesh);
+
+            // 테두리 부분 상단에 눈 조금 덮기 (너무 깊지 않은 것들만)
+            if (y > -25) {
+                const snowGeo = new THREE.DodecahedronGeometry(scale * 0.95, 0);
                 const snowMesh = new THREE.Mesh(snowGeo, materials.snow);
-                snowMesh.position.set(x, y + scale * 0.5, z);
+                // 바위 위에 살짝 얹히도록 위치 조정
+                snowMesh.position.set(x, y + scale * 0.4, z);
                 snowMesh.rotation.copy(mesh.rotation);
+                snowMesh.receiveShadow = true;
                 islandGroup.add(snowMesh);
             }
         }
@@ -186,7 +213,7 @@
     }
     createFloatingIsland();
 
-    // --- [수정] 밤하늘 (달과 별이 보이도록 수정) ---
+    // --- 밤하늘 (달과 별) ---
     function createNightSky() {
         // 1. 그라데이션 하늘
         const skyGeo = new THREE.SphereGeometry(CONFIG.skySize, 64, 64);
@@ -213,7 +240,7 @@
         const skyDome = new THREE.Mesh(skyGeo, skyMat);
         scene.add(skyDome);
 
-        // 2. [수정] 달 (Moon) 추가 - 더 잘 보이게 위치 및 크기 조정
+        // 2. 달 (Moon)
         const moonGroup = new THREE.Group();
         const moonMesh = new THREE.Mesh(new THREE.SphereGeometry(40, 32, 32), materials.moon);
         const glowGeo = new THREE.CircleGeometry(60, 32);
@@ -222,10 +249,10 @@
         glowMesh.lookAt(camera.position); 
         moonGroup.add(moonMesh);
         moonGroup.add(glowMesh);
-        moonGroup.position.set(500, 800, -1000); // 위치 조정
+        moonGroup.position.set(500, 800, -1000); 
         scene.add(moonGroup);
 
-        // 3. [수정] 별 (Stars) - PointsMaterial로 확실하게 보이게 변경
+        // 3. 별 (Stars)
         const starGeo = new THREE.BufferGeometry();
         const starPos = [];
         for(let i=0; i<3000; i++) {
@@ -578,7 +605,8 @@
             const vel = snowSystem.userData.velocities;
             for(let i=0; i<CONFIG.snowCount; i++) {
                 pos[i*3 + 1] -= vel[i];
-                if(pos[i*3+1] < -50) { 
+                // 눈이 섬의 가장 깊은 바닥보다 더 아래로 떨어지면 재사용
+                if(pos[i*3+1] < -100) { 
                     pos[i*3+1] = 150;
                     pos[i*3] = (Math.random()-0.5) * CONFIG.islandRadius * 2.5;
                     pos[i*3+2] = (Math.random()-0.5) * CONFIG.islandRadius * 2.5;
