@@ -159,6 +159,7 @@
     scene.add(ground);
 
     // --- [추가] 예쁜 밤하늘 (그라데이션 + 별) ---
+    let stars; // 전역 변수로 선언하여 애니메이션에서 접근 가능하게 함
     function createGradientSky() {
         // 1. 그라데이션 하늘 (Vertex Colors 활용)
         const skyGeo = new THREE.SphereGeometry(CONFIG.skySize, 32, 32);
@@ -199,6 +200,7 @@
         // 2. 배경 별 (멀리서 반짝이는 별들)
         const starGeo = new THREE.BufferGeometry();
         const starPos = [];
+        const starInitialOpacities = []; // 초기 투명도 저장용 배열
         for(let i=0; i<1500; i++) {
             const r = CONFIG.skySize * 0.9; // 하늘 돔보다 약간 안쪽
             const theta = Math.random() * Math.PI * 2;
@@ -212,16 +214,39 @@
                 r * Math.cos(phi), // Y축이 위
                 r * Math.sin(phi) * Math.sin(theta)
             );
+            starInitialOpacities.push(0.5 + Math.random() * 0.5); // 0.5 ~ 1.0 사이의 랜덤 초기 투명도
         }
         starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPos, 3));
-        const starMat = new THREE.PointsMaterial({
-            color: 0xffffff,
-            size: 8,
+        // 각 별의 투명도를 개별적으로 조절하기 위해 alpha 속성 추가
+        starGeo.setAttribute('alpha', new THREE.Float32BufferAttribute(starInitialOpacities, 1));
+
+        // 커스텀 셰이더 재질을 사용하여 각 별의 alpha 값을 적용
+        const starMat = new THREE.ShaderMaterial({
+            uniforms: {
+                time: { value: 0.0 }
+            },
+            vertexShader: `
+                attribute float alpha;
+                varying float vAlpha;
+                void main() {
+                    vAlpha = alpha;
+                    gl_PointSize = 8.0;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                uniform float time;
+                varying float vAlpha;
+                void main() {
+                    // 시간에 따라 반짝이는 효과 (사인파 이용)
+                    float twinkle = 0.7 + 0.3 * sin(time * 2.0 + vAlpha * 10.0);
+                    gl_FragColor = vec4(1.0, 1.0, 1.0, vAlpha * twinkle);
+                }
+            `,
             transparent: true,
-            opacity: 0.8,
             fog: false
         });
-        const stars = new THREE.Points(starGeo, starMat);
+        stars = new THREE.Points(starGeo, starMat);
         scene.add(stars);
     }
 
@@ -640,6 +665,11 @@
         const time = clock.getElapsedTime();
 
         controls.update();
+
+        // [추가] 별 반짝임 효과 업데이트
+        if (stars && stars.material.uniforms) {
+            stars.material.uniforms.time.value = time;
+        }
 
         // 눈
         if(snowSystem) {
