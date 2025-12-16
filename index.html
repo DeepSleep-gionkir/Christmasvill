@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Ultimate Christmas Tree Village - Whiteout Edition</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            /* [수정] 배경을 흰색으로 변경 */
+            background-color: #ffffff;
+            font-family: 'Noto Sans KR', sans-serif;
+        }
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            /* [수정] 흰 배경에서 잘 보이도록 글씨 색상 변경 (금색 계열) */
+            color: #d4af37;
+            font-size: 1.2rem;
+            pointer-events: none;
+            transition: opacity 0.5s;
+            font-weight: bold;
+            text-align: center;
+        }
+        .controls-info {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            /* [수정] 안내 문구 색상 변경 */
+            color: rgba(50, 50, 50, 0.8);
+            font-size: 0.9rem;
+            pointer-events: none;
+            text-align: center;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+
+<div id="loading">🎄 온 세상이 하얗게 물드는 중... 🎄</div>
+<div id="canvas-container"></div>
+<div class="controls-info">화면을 드래그하여 마을 둘러보기</div>
+
+<script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+</script>
+
+<script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // --- 설정 변수 ---
+    const CONFIG = {
+        snowCount: 2500,
+        houseCount: 12,
+        treeCount: 60,
+        villagerCount: 15,
+        // [수정] 배경과 안개를 완전한 흰색으로 설정
+        sceneColor: 0xffffff, 
+        fogColor: 0xffffff,   
+        shadowMapSize: 2048,
+        groundSize: 5000
+    };
+
+    const container = document.getElementById('canvas-container');
+    const loading = document.getElementById('loading');
+
+    // 씬 생성
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(CONFIG.sceneColor);
+    // 안개를 흰색으로 설정하여 멀리 있는 땅이 배경과 자연스럽게 섞이도록 함
+    scene.fog = new THREE.FogExp2(CONFIG.fogColor, 0.0015); 
+
+    // 카메라 설정 (Orthographic)
+    const aspect = container.clientWidth / container.clientHeight;
+    const d = 65;
+    const camera = new THREE.OrthographicCamera(-d * aspect, d * aspect, d, -d, 1, 10000);
+    camera.position.set(100, 80, 100); 
+    camera.lookAt(scene.position);
+
+    // 렌더러
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    // [수정] 전체적으로 너무 밝아지지 않도록 노출값 약간 조정
+    renderer.toneMappingExposure = 1.1;
+    container.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.maxPolarAngle = Math.PI / 2 - 0.02; 
+    controls.minZoom = 0.4;
+    controls.maxZoom = 2.5;
+
+    // --- 조명 ---
+    function setupLighting() {
+        // [수정] 환경광을 매우 밝게 설정 (하늘도 흰색, 땅 반사광도 흰색)
+        const ambientLight = new THREE.HemisphereLight(0xffffff, 0xffffff, 1.0);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+        dirLight.position.set(-80, 120, -60);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.set(2048, 2048);
+        dirLight.shadow.camera.left = -200;
+        dirLight.shadow.camera.right = 200;
+        dirLight.shadow.camera.top = 200;
+        dirLight.shadow.camera.bottom = -200;
+        // 그림자가 너무 진하지 않게 조정
+        dirLight.shadow.bias = -0.0005;
+        scene.add(dirLight);
+
+        // 포인트 라이트들의 강도를 밝은 배경에 맞춰 약간 조정
+        const centerLight = new THREE.PointLight(0xffaa00, 2.0, 60);
+        centerLight.position.set(0, 15, 0);
+        scene.add(centerLight);
+        
+        const topLight = new THREE.PointLight(0x88ccff, 0.8, 40);
+        topLight.position.set(0, 30, 0);
+        scene.add(topLight);
+    }
+    setupLighting();
+
+    // --- 재질 ---
+    const materials = {
+        // [수정] 눈 재질이 밝은 빛에서 너무 타지 않도록 거칠기 조정
+        snow: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1.0 }),
+        wood: new THREE.MeshStandardMaterial({ color: 0x8d6e63, roughness: 1.0 }),
+        darkWood: new THREE.MeshStandardMaterial({ color: 0x4e342e, roughness: 1.0 }),
+        leaf: new THREE.MeshStandardMaterial({ color: 0x1b5e20, roughness: 0.8, flatShading: true }),
+        glowYellow: new THREE.MeshStandardMaterial({ 
+            color: 0xffd54f, emissive: 0xffa000, emissiveIntensity: 3 
+        }),
+        gold: new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.7, roughness: 0.3 }),
+        red: new THREE.MeshStandardMaterial({ color: 0xd32f2f, roughness: 0.4, metalness: 0.1 }),
+        silver: new THREE.MeshStandardMaterial({ color: 0xe0e0e0, metalness: 0.8, roughness: 0.2 }),
+        blue: new THREE.MeshStandardMaterial({ color: 0x1976d2, roughness: 0.4, metalness: 0.1 }),
+        lampPost: new THREE.MeshStandardMaterial({ color: 0x212121, metalness: 0.5, roughness: 0.5 })
+    };
+
+    // --- 무한히 넓은 바닥 ---
+    const ground = new THREE.Mesh(
+        new THREE.CylinderGeometry(CONFIG.groundSize, CONFIG.groundSize, 10, 64),
+        materials.snow
+    );
+    ground.position.y = -5;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    // [삭제] createGradientSky 함수 제거됨 (하늘 돔 및 별 삭제)
+
+    // --- 눈송이 (떨어지는 눈) ---
+    let snowSystem;
+    function createSnow() {
+        const geo = new THREE.BufferGeometry();
+        const positions = [];
+        const velocities = [];
+        const range = 400;
+
+        for (let i = 0; i < CONFIG.snowCount; i++) {
+            positions.push(
+                (Math.random() - 0.5) * range,
+                Math.random() * 150,
+                (Math.random() - 0.5) * range
+            );
+            velocities.push(Math.random() * 0.3 + 0.1);
+        }
+
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        
+        const canvas = document.createElement('canvas');
+        canvas.width = 32; canvas.height = 32;
+        const ctx = canvas.getContext('2d');
+        const grad = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+        grad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+        grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 32, 32);
+
+        const mat = new THREE.PointsMaterial({
+            color: 0xffffff,
+            size: 1.2,
+            map: new THREE.CanvasTexture(canvas),
+            transparent: true,
+            // [수정] 밝은 배경에서 눈이 잘 보이도록 투명도 약간 조정
+            opacity: 0.8, 
+            depthWrite: false,
+            blending: THREE.AdditiveBlending
+        });
+
+        snowSystem = new THREE.Points(geo, mat);
+        snowSystem.userData = { velocities: velocities };
+        scene.add(snowSystem);
+    }
+
+    // --- 소나무 ---
+    function createPineTree(x, z, scale = 1) {
+        const group = new THREE.Group();
+        
+        const trunk = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.5 * scale, 1 * scale, 3 * scale, 6),
+            materials.darkWood
+        );
+        trunk.position.y = 1.5 * scale;
+        trunk.castShadow = true;
+        group.add(trunk);
+
+        for(let i=0; i<3; i++) {
+            const size = (2.5 - i * 0.5) * scale;
+            const y = (3 + i * 2) * scale;
+            const cone = new THREE.Mesh(
+                new THREE.ConeGeometry(size, 3 * scale, 7),
+                materials.leaf
+            );
+            cone.position.y = y;
+            cone.castShadow = true;
+            cone.receiveShadow = true;
+            group.add(cone);
+
+            const snowCap = new THREE.Mesh(
+                new THREE.ConeGeometry(size * 0.9, 1 * scale, 7),
+                materials.snow
+            );
+            snowCap.position.y = y - 0.5 * scale;
+            snowCap.rotation.y = Math.random();
+            group.add(snowCap);
+        }
+
+        group.position.set(x, 0, z);
+        group.rotation.y = Math.random() * Math.PI * 2;
+        const randScale = 0.8 + Math.random() * 0.4;
+        group.scale.set(randScale, randScale, randScale);
+        scene.add(group);
+    }
+
+    // --- 가로등 ---
+    function createLamp(x, z) {
+        const group = new THREE.Group();
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.3, 8, 6), materials.lampPost);
+        pole.position.y = 4;
+        pole.castShadow = true;
+        group.add(pole);
+
+        const head = new THREE.Mesh(new THREE.DodecahedronGeometry(0.8), materials.glowYellow);
+        head.position.y = 8;
+        group.add(head);
+
+        const light = new THREE.PointLight(0xffaa00, 1.5, 15);
+        light.position.y = 8;
+        group.add(light);
+
+        group.position.set(x, 0, z);
+        scene.add(group);
+    }
+
+    // --- 눈사람 ---
+    function createSnowman(x, z) {
+        const group = new THREE.Group();
+        const bottom = new THREE.Mesh(new THREE.SphereGeometry(1.5, 12, 12), materials.snow);
+        bottom.position.y = 1.2;
+        bottom.castShadow = true;
+        
+        const top = new THREE.Mesh(new THREE.SphereGeometry(1.0, 12, 12), materials.snow);
+        top.position.y = 3.2;
+        top.castShadow = true;
+
+        const nose = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.8, 8), materials.red);
+        nose.geometry.rotateX(Math.PI / 2);
+        nose.position.set(0, 3.2, 0.9);
+
+        const hat = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 1, 8), materials.lampPost);
+        hat.position.set(0, 4.2, 0);
+
+        group.add(bottom, top, nose, hat);
+        group.position.set(x, 0, z);
+        group.rotation.y = (Math.random() - 0.5) * 1;
+        scene.add(group);
+    }
+
+    // --- 선물 ---
+    function createGift(x, z) {
+        const size = 1 + Math.random();
+        const box = new THREE.Mesh(
+            new THREE.BoxGeometry(size, size, size),
+            new THREE.MeshStandardMaterial({ 
+                color: Math.random() > 0.5 ? 0xd32f2f : 0x1976d2,
+                roughness: 0.4
+            })
+        );
+        box.position.set(x, size/2, z);
+        box.rotation.y = Math.random();
+        box.castShadow = true;
+        scene.add(box);
+    }
+
+    // --- 집 ---
+    function createHouse(x, z, angle) {
+        const group = new THREE.Group();
+        const w = 7 + Math.random() * 3;
+        const d = 7 + Math.random() * 3;
+        const h = 6 + Math.random() * 3;
+
+        const walls = new THREE.Mesh(
+            new THREE.BoxGeometry(w, h, d),
+            Math.random() > 0.5 ? materials.wood : materials.darkWood
+        );
+        walls.position.y = h/2;
+        walls.castShadow = true;
+        walls.receiveShadow = true;
+        group.add(walls);
+
+        const roofH = 4;
+        const roof = new THREE.Mesh(
+            new THREE.ConeGeometry(Math.max(w,d)*0.8, roofH, 4),
+            materials.snow
+        );
+        roof.position.y = h + roofH/2;
+        roof.rotation.y = Math.PI/4;
+        roof.scale.set(1, 1, w > d ? 0.6 : 1.4);
+        roof.castShadow = true;
+        group.add(roof);
+
+        const win = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.2), materials.glowYellow);
+        win.position.set(0, h/2, d/2 + 0.05);
+        group.add(win);
+        
+        const door = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 3), materials.darkWood);
+        door.position.set(w/4, 1.5, d/2 + 0.06);
+        group.add(door);
+
+        group.position.set(x, 0, z);
+        group.rotation.y = angle;
+        scene.add(group);
+    }
+
+    // --- 메인 트리 ---
+    const ornaments = [];
+    let fairyLightsSystem;
+
+    function createMainTree() {
+        const group = new THREE.Group();
+
+        const levels = 7;
+        const maxRadius = 10;
+        const treeHeight = 35;
+
+        // 나무 본체
+        for(let i=0; i<levels; i++) {
+            const ratio = i / levels;
+            const r = maxRadius * (1 - ratio * 0.8); 
+            const y = 3 + i * 4;
+            
+            const cone = new THREE.Mesh(
+                new THREE.ConeGeometry(r, 8, 10),
+                materials.leaf
+            );
+            cone.position.y = y;
+            cone.castShadow = true;
+            cone.receiveShadow = true;
+            group.add(cone);
+
+            if(i < levels-1) {
+                const snowRing = new THREE.Mesh(
+                    new THREE.TorusGeometry(r * 0.9, 0.2, 2, 10),
+                    materials.snow
+                );
+                snowRing.position.y = y - 3.5;
+                snowRing.rotation.x = Math.PI / 2;
+                group.add(snowRing);
+            }
+        }
+
+        // 오너먼트
+        for(let i=0; i<levels; i++) {
+            const r = maxRadius * (1 - i / levels * 0.8);
+            const y = 3 + i * 4;
+            const count = 10 - i; 
+            if(count < 3) continue;
+
+            for(let j=0; j<count; j++) {
+                const angle = (j / count) * Math.PI * 2 + (i * 0.5);
+                const ox = Math.cos(angle) * r * 0.85; 
+                const oz = Math.sin(angle) * r * 0.85;
+
+                const rand = Math.random();
+                let mat = materials.red;
+                if(rand > 0.75) mat = materials.gold;
+                else if(rand > 0.5) mat = materials.silver;
+                else if(rand > 0.25) mat = materials.blue;
+
+                const size = 0.4 + Math.random() * 0.2;
+                const ball = new THREE.Mesh(new THREE.SphereGeometry(size, 8, 8), mat);
+                ball.position.set(ox, y - 3, oz);
+                group.add(ball);
+
+                if(Math.random() > 0.8) {
+                    ball.material = materials.glowYellow;
+                    ornaments.push({ mesh: ball, offset: Math.random() * 10 });
+                }
+            }
+        }
+
+        // 리본
+        const points = [];
+        const loops = 5;
+        const hStart = 3;
+        const hEnd = 30;
+        for(let i = 0; i <= 150; i++) {
+            const t = i / 150;
+            const angle = t * Math.PI * 2 * loops;
+            const y = hStart + t * (hEnd - hStart);
+            const currentR = maxRadius * (1 - t * 0.9) + 0.2;
+            points.push(new THREE.Vector3(Math.cos(angle) * currentR, y, Math.sin(angle) * currentR));
+        }
+        const ribbon = new THREE.Mesh(
+            new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), 100, 0.3, 8, false),
+            materials.gold
+        );
+        ribbon.castShadow = true;
+        group.add(ribbon);
+
+        // 요정 조명
+        const fairyGeo = new THREE.BufferGeometry();
+        const fairyPos = [];
+        const fairyCount = 300;
+        for(let i=0; i<fairyCount; i++) {
+            const t = i / fairyCount;
+            const angle = t * Math.PI * 2 * 9 + Math.random(); 
+            const y = hStart + t * (hEnd - hStart) + (Math.random()-0.5);
+            const r = (maxRadius * (1 - t * 0.9)) + 0.4 + (Math.random() * 0.5);
+            fairyPos.push(Math.cos(angle) * r, y, Math.sin(angle) * r);
+        }
+        fairyGeo.setAttribute('position', new THREE.Float32BufferAttribute(fairyPos, 3));
+        const fairyMat = new THREE.PointsMaterial({
+            color: 0xffe082,
+            size: 0.6,
+            transparent: true,
+            opacity: 0.9,
+            blending: THREE.AdditiveBlending
+        });
+        fairyLightsSystem = new THREE.Points(fairyGeo, fairyMat);
+        group.add(fairyLightsSystem);
+
+        // 꼭대기 별
+        const star = new THREE.Mesh(
+            new THREE.OctahedronGeometry(2.5, 0),
+            materials.glowYellow
+        );
+        star.position.y = 32;
+        star.userData = { rotationSpeed: 0.02 }; 
+        group.add(star);
+        ornaments.push({ mesh: star, isStar: true });
+
+        scene.add(group);
+    }
+
+    // --- 루돌프 썰매 ---
+    let sleighGroup;
+    function createSleigh() {
+        sleighGroup = new THREE.Group();
+        const body = new THREE.Mesh(new THREE.BoxGeometry(4, 2, 6), materials.red);
+        sleighGroup.add(body);
+        
+        const light = new THREE.PointLight(0xffffff, 1, 10);
+        light.position.set(0, 1, 0);
+        sleighGroup.add(light);
+
+        for(let i=0; i<4; i++) {
+            const deer = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 2), materials.wood);
+            deer.position.set(i%2===0 ? -1.5 : 1.5, -0.5, 5 + Math.floor(i/2)*3);
+            if(i >= 2) {
+                const nose = new THREE.Mesh(new THREE.SphereGeometry(0.3), materials.glowYellow);
+                nose.position.set(0, 0.5, 1);
+                deer.add(nose);
+            }
+            sleighGroup.add(deer);
+        }
+        scene.add(sleighGroup);
+    }
+
+    // --- 주민 ---
+    const villagers = [];
+    function createVillagers() {
+        const geo = new THREE.CapsuleGeometry(0.4, 0.8, 4, 8);
+        const headGeo = new THREE.SphereGeometry(0.35);
+
+        for(let i=0; i<CONFIG.villagerCount; i++) {
+            const group = new THREE.Group();
+            const color = new THREE.Color().setHSL(Math.random(), 0.8, 0.4);
+            const mat = new THREE.MeshStandardMaterial({ color: color });
+            
+            const body = new THREE.Mesh(geo, mat);
+            body.position.y = 0.8;
+            body.castShadow = true;
+            
+            const head = new THREE.Mesh(headGeo, materials.wood);
+            head.position.y = 1.6;
+            
+            group.add(body, head);
+            
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 15 + Math.random() * 20;
+            group.position.set(Math.cos(angle)*dist, 0, Math.sin(angle)*dist);
+            
+            scene.add(group);
+            
+            villagers.push({
+                mesh: group,
+                angle: angle,
+                dist: dist,
+                speed: 0.003 + Math.random() * 0.004,
+                hopOffset: Math.random() * Math.PI
+            });
+        }
+    }
+
+    // --- 초기화 ---
+    function initWorld() {
+        // [수정] createGradientSky() 호출 제거
+        createSnow();
+        createMainTree();
+        createSleigh();
+        createVillagers();
+
+        // 1. 집 배치
+        for(let i=0; i<CONFIG.houseCount; i++) {
+            const angle = (i / CONFIG.houseCount) * Math.PI * 2 + (Math.random()*0.2);
+            const dist = 35 + Math.random() * 10;
+            createHouse(Math.cos(angle)*dist, Math.sin(angle)*dist, -angle + Math.PI/2);
+            
+            if(Math.random() > 0.3) {
+                createLamp(Math.cos(angle)*(dist+6), Math.sin(angle)*(dist+6));
+            }
+            if(Math.random() > 0.5) {
+                createGift(Math.cos(angle)*(dist-4), Math.sin(angle)*(dist-4));
+            }
+        }
+
+        // 2. 숲 배치
+        for(let i=0; i<CONFIG.treeCount; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 55 + Math.random() * 60; 
+            createPineTree(Math.cos(angle)*dist, Math.sin(angle)*dist, 1 + Math.random()*0.5);
+        }
+
+        // 3. 눈사람
+        for(let i=0; i<5; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 25 + Math.random() * 20;
+            createSnowman(Math.cos(angle)*dist, Math.sin(angle)*dist);
+        }
+
+        loading.style.opacity = 0;
+        setTimeout(() => loading.remove(), 500);
+    }
+    
+    initWorld();
+
+    // --- 애니메이션 ---
+    const clock = new THREE.Clock();
+    
+    function animate() {
+        requestAnimationFrame(animate);
+        const time = clock.getElapsedTime();
+
+        controls.update();
+
+        // 눈
+        if(snowSystem) {
+            const pos = snowSystem.geometry.attributes.position.array;
+            const vel = snowSystem.userData.velocities;
+            for(let i=0; i<CONFIG.snowCount; i++) {
+                pos[i*3 + 1] -= vel[i];
+                if(pos[i*3+1] < 0) {
+                    pos[i*3+1] = 150;
+                    pos[i*3] = (Math.random()-0.5) * 400;
+                    pos[i*3+2] = (Math.random()-0.5) * 400;
+                }
+            }
+            snowSystem.geometry.attributes.position.needsUpdate = true;
+            snowSystem.rotation.y = Math.sin(time * 0.1) * 0.1;
+        }
+
+        // 썰매
+        if(sleighGroup) {
+            const r = 60;
+            const h = 40;
+            sleighGroup.position.x = Math.sin(time*0.3) * r;
+            sleighGroup.position.z = Math.cos(time*0.3) * r;
+            sleighGroup.position.y = h + Math.sin(time*0.8)*5;
+            sleighGroup.lookAt(
+                Math.sin(time*0.3 + 0.1) * r, 
+                h, 
+                Math.cos(time*0.3 + 0.1) * r
+            );
+        }
+
+        // 오너먼트
+        ornaments.forEach(obj => {
+            if(obj.isStar) {
+                if (obj.mesh.userData && obj.mesh.userData.rotationSpeed) {
+                    obj.mesh.rotation.y += obj.mesh.userData.rotationSpeed;
+                }
+                const s = 1 + Math.sin(time*2)*0.2;
+                obj.mesh.scale.set(s,s,s);
+            } else {
+                obj.mesh.material.emissiveIntensity = 1.5 + Math.sin(time*3 + obj.offset);
+            }
+        });
+
+        if(fairyLightsSystem) {
+            fairyLightsSystem.rotation.y = time * 0.05;
+            const blink = 0.7 + Math.sin(time * 3) * 0.3;
+            fairyLightsSystem.material.opacity = blink;
+        }
+
+        // 주민
+        villagers.forEach(v => {
+            v.angle += v.speed;
+            v.mesh.position.x = Math.cos(v.angle) * v.dist;
+            v.mesh.position.z = Math.sin(v.angle) * v.dist;
+            v.mesh.rotation.y = -v.angle;
+            v.mesh.position.y = Math.abs(Math.sin(time*8 + v.hopOffset)) * 0.6;
+        });
+
+        renderer.render(scene, camera);
+    }
+    
+    animate();
+
+    // 리사이즈
+    window.addEventListener('resize', () => {
+        const aspect = window.innerWidth / window.innerHeight;
+        camera.left = -d * aspect;
+        camera.right = d * aspect;
+        camera.top = d;
+        camera.bottom = -d;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+</script>
+</body>
+</html>
